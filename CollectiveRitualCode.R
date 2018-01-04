@@ -1,30 +1,55 @@
+## Code to accompany ``Social Support Networks and Religiosity in Rural South India'' 
+## Includes code for: 
+## (1) generating the social support networks
+## (2) running the exponential graph models predicting supportive relationships
+## (3) calculating cohesiveness of the networks of co-participants
+## (4) predicting the likelihood that individuals will have supportive relationships with people of other religions
+## (5) visualizing the networks
 
-## Code to accompany ``Collective Ritual and Social Support Networks in Rural South India'' ##
 
+#################################
+#################################
+## 1. GENERATING THE NETWORKS  ##
+#################################
+#################################
 
 require(igraph)
 
-TenH <- read.csv("TenHMetadata2.csv",header=TRUE)
+## Read in the files that include details of each individual, including age, gender, caste & religion, years of education, household wealth, religious participation, etc.
+Ten <- read.csv("TenMetadata.csv",header=TRUE,as.is=TRUE)
 
 ## Read in the edge list, which includes columns for Ego, Alter, and then each of the 12 support types
-elTenH <- read.csv("TenHEdgeList.csv")
+elTen <- read.csv("TenSocialEdgeList.csv")
 
 ## generate a network from the edgelist, but this lacks the associated metadata
-snaTenH <- graph.data.frame(elTenH)
-V(snaTenH)$label <- V(snaTenH)$name
-IndivIDTenH <- V(snaTenH)$label
-IndivIDTenH <- data.frame(IndivIDTenH)
+snaTen <- graph.data.frame(elTen)
+IndivIDTen <- V(snaTen)$name
+IndivIDTen <- data.frame(IndivIDTen)
 
 ## append the individual metadata to each individual included in the network
-attTenH <- merge(IndivIDTenH,TenH,by.x="IndivIDTenH",by.y="IndivID",sort=FALSE,all.x=TRUE)
-colnames(attTenH)[1] <- "IndivID"
+attTen <- merge(IndivIDTen,Ten,by.x="IndivIDTen",by.y="IndivID",sort=FALSE,all.x=TRUE)
+colnames(attTen)[1] <- "IndivID"
 
 ## generate the full network
-snaTenHSupFull <- graph.data.frame(d = elTenH, vertices = attTenH, directed=TRUE)
+snaTenSupFull <- graph.data.frame(d = elTen, vertices = attTen, directed=TRUE)
 
 ## reduce the network down to include only those who completed the survey in the village (many people outside the village are named, but the analyses here require that each individual can have both incoming and outgoing ties)
-snaTenHSup <- delete.vertices(snaTenHSupFull,V(snaTenHSupFull)[degree(snaTenHSupFull,mode="out")==0])
+snaTenSup <- delete.vertices(snaTenSupFull,V(snaTenSupFull)[degree(snaTenSupFull,mode="out")==0])
 
+## limit the edge list to only Hindu respondents
+elTenH<-merge(elTen,Ten[,c(1,8)],by.x="Ego",by.y="IndivID",all.x=TRUE)
+elTenH<-subset(elTenH,Religion==0)
+elTenH<-elTenH[,-16]
+
+## generate networks only for 
+snaTenH <- graph.data.frame(elTenH)
+IndivIDTenH <- V(snaTenH)$name
+IndivIDTenH <- data.frame(IndivIDTenH)
+attTenH <- merge(IndivIDTenH,Ten,by.x="IndivIDTenH",by.y="IndivID",sort=FALSE,all.x=TRUE)
+colnames(attTenH)[1] <- "IndivID"
+
+snaTenHSupFull <- graph.data.frame(d = elTenH, vertices = attTenH, directed=TRUE)
+snaTenHSup <- delete.vertices(snaTenHSupFull,V(snaTenHSupFull)[degree(snaTenHSupFull,mode="out")==0])
 
 ######################
 ## Kinship Networks ##
@@ -92,14 +117,18 @@ Net_snaTenHSup <- asNetwork(snaTenHSup)
 Net_kinTenH <- asNetwork(knetTenH)
 
 
-#########################################################################
-#########################################################################
-########## FROM HERE RUNNING FULL MODELS THAT TAKE A LONG TIME ##########
-#########################################################################
-#########################################################################
+##########################################
+##########################################
+## 2. EXPONTENTIAL RANDOM GRAPH MODELS  ##
+##########################################
+##########################################
 
+## Note that the GWESP alpha values used here are the ones that result in the lowest AIC & BIC values. To establish these values, I ran models starting with GWESP alpha = 0.1 ((gwesp(alpha=0.1,T)) and increased by steps of 0.1 until AIC and BIC values reached their lowest point.
+## Models were also evaluated by looking at the MCMC output (mcmc.diagnostics(modelname)) and goodness of fit (gof(modelname ~idegree + odegree + esp + distance)) to ensure that the generated networks are reasonable approximations of the observed network
 
-## alpha levels selected through incremental increases from 0.1 until AIC/BIC cease to improve.
+## For MariAtt: nodematch("MariAtt",diff=TRUE,keep=2)
+
+## For MariFest: nodemix("mulvowNone2012", base = c(2, 4, 5, 6, 8))
 
 modelTenSupHindu <- ergm(Net_snaTenHSup ~ edges + nodecov("Age") + nodematch("Gender") + nodefactor("Gender") + edgecov(Net_kinTenH,attrname="Kin") + nodematch("Caste") + nodefactor("Caste") + absdiff("EduYears") + nodeifactor("EverCommMember") + edgecov(TenHdistancemat/10) + mutual + gwesp(0.4,T) + gwdsp(0.4,T), control = control.ergm(MCMC.burnin=15000,MCMC.samplesize=50000,MCMC.interval=1000),verbose=FALSE)
 summary(modelTenSupHindu)
@@ -117,15 +146,13 @@ modelTenSupHindu_all <- ergm(Net_snaTenHSup ~ edges + nodecov("Age") + nodematch
 summary(modelTenSupHindu_all)
 saveRDS(modelTenSupHindu_all,"modelTenSupHindu_all.rds")
 
-
-install.packages("texreg")
 require(texreg)
 
 texreg(list(modelTenSupHindu,modelTenSupHindu_coworship,modelTenSupHindu_cofest,modelTenSupHindu_all),digits=3)
 
-
-##### PLOTTING RESULTS ######
-
+##################################
+## Reporting & Plotting Results ##
+##################################
 
 or <- exp( modelTenSupHindu_coworship$coef ) 
 ste <- sqrt( diag( modelTenSupHindu_coworship$covar ) ) 
@@ -142,10 +169,13 @@ colnames( teststats ) <- c("Wald")
 teststats
 
 TenResults<-cbind(summary(modelTenSupHindu_coworship)$coefs[1],summary(modelTenSupHindu_coworship)$coefs[2],or,summary(modelTenSupHindu_coworship)$coefs[4])
+
+require(xtable)
+
 xtable(TenResults,digits=c(3,3,3,3,4))
 
 
-## Plotting AllSup with Co-Wor
+## Plotting ERGM with Co-Wor
 TenHCoWorcoefs <- modelTenSupHindu_coworship$coef
 
 estoprob <- function(b) {
@@ -184,7 +214,7 @@ text(x=labloc,y=par()$usr[3]-0.1*(par()$usr[4]-par()$usr[4]/3),labels=lab,cex=0.
 legend("topleft",c("No Co-Attendance","Co-Attendance"),cex=0.6,col=c(colors[c(1,2)]),pch=c(1,6))
 
 
-## Plotting AllSup with Co-Fest
+## Plotting ERGM with Co-Fest
 TenHCoFestpredergm<-read.csv("TenHPredictERGMCollRit.csv",header=TRUE,as.is=TRUE)
 TenHCoFestpredergm<-TenHCoFestpredergm[-c(18,21:23),]
 
@@ -240,9 +270,7 @@ TenResults<-cbind(summary(modelTenSupHindu_cofest)$coefs[1],summary(modelTenSupH
 xtable(TenResults,digits=c(3,3,3,3,4))
 
 
-
-
-## Plotting AllSup with All
+## Plotting ERGM with All
 TenHCoAllpredergm<-read.csv("TenHPredictERGMCollRit.csv",header=TRUE,as.is=TRUE)
 
 TenHCoAllcoefs <- modelTenSupHindu_all$coef
@@ -300,32 +328,24 @@ teststats
 TenResults<-cbind(summary(modelTenSupHindu_all)$coefs[1],summary(modelTenSupHindu_all)$coefs[2],or,summary(modelTenSupHindu_all)$coefs[4])
 xtable(TenResults,digits=c(3,3,3,3,4))
 
-#########################################################################
-#########################################################################
-######### COLLECTIVE WORSHIP DENSITY, TRANSITIVITY, RECIPROCITY #########
-#########################################################################
-#########################################################################
 
-Ten <- read.csv("TenMetadata.csv",header=TRUE)
 
-elTen <- read.csv("TenSocialEdgeList.csv")
+#############################################################################
+#############################################################################
+## 3. COLLECTIVE WORSHIP EXCESS EDGES, DENSITY, TRANSITIVITY, RECIPROCITY  ##
+#############################################################################
+#############################################################################
 
-## generate a network from the edgelist, but this lacks the associated metadata
-snaTen <- graph.data.frame(elTen)
-V(snaTen)$label <- V(snaTen)$name
-IndivIDTen <- V(snaTen)$label
-IndivIDTen <- data.frame(IndivIDTen)
+## Calculating the 'excess edges,' density, transitivity, and reciprocity for each of the collective worship subgraphs
+## To see if increases in any of these measures of cohesion are greater than we would expect, I additionally calculate these same measures on 10,000 hypothetical subgraphs with the same number of nodes/individuals, pulled from the larger set of potential participants
+## The comparisons are as follows:
+## (1) The subgraph of Hindu residents to the whole village
+## (2) The subgraph of monthly puja participants to all Hindu residents
+## (3) The subgraph of annual festival participants to all Hindu residents
+## (4) The subgraph of vow procession participants to all Hindu residents (not reported in the paper)
+## (5) The subgraph of vow procession participants to all annual festival participants (reported in the paper)
 
-## append the individual metadata to each individual included in the network
-attTen <- merge(IndivIDTen,Ten,by.x="IndivIDTen",by.y="IndivID",sort=FALSE,all.x=TRUE)
-colnames(attTen)[1] <- "IndivID"
-
-## generate the full network
-snaTenSupFull <- graph.data.frame(d = elTen, vertices = attTen, directed=TRUE)
-
-## reduce the network down to include only those who completed the survey in the village (many people outside the village are named, but the analyses here require that each individual can have both incoming and outgoing ties)
-snaTenSup <- delete.vertices(snaTenSupFull,V(snaTenSupFull)[degree(snaTenSupFull,mode="out")==0])
-
+## creating additional networks that include only those individuals who participated in each collective ritual
 snaTenHSupMariFest2012<-delete.vertices(snaTenHSup,V(snaTenHSup)[get.vertex.attribute(snaTenHSup,name="Fest2012")==0])
 snaTenHSupMariProcession<-delete.vertices(snaTenHSup,V(snaTenHSup)[get.vertex.attribute(snaTenHSup,name="Procession")==0])
 snaTenHSupMariMulaipari<-delete.vertices(snaTenHSup,V(snaTenHSup)[get.vertex.attribute(snaTenHSup,name="Mulaipari")==0])
@@ -333,10 +353,62 @@ snaTenHSupMariMulaipari<-delete.vertices(snaTenHSup,V(snaTenHSup)[get.vertex.att
 snaTenHSupMariAtt<-delete.vertices(snaTenHSup,V(snaTenHSup)[get.vertex.attribute(snaTenHSup,name="MariAtt")==0])
 
 
+#########################
+## All Hindu Residents ##
+#########################
+
+## First, seeing if the subgraph of Hindu residents is more cohesive than the whole village
+
+## The relevant comparison here is to the whole village
+
+## Creating a matrix of all dyads where I'm in a sense weighting the existence of each edge by the overall likelihood of that edge, given the outdegree of i and the indegree of j (over the total number of edges)
+g3<-get.adjacency(snaTenSup)
+for (i in 1:length(V(snaTenSup)$name)){
+  for (j in 1:length(V(snaTenSup)$name)){
+    g3[i,j]=are.connected(snaTenSup,i,j)*1 - ((degree(snaTenSup,i,mode="out")*degree(snaTenSup,j,mode="in"))/ecount(snaTenSup))
+  }
+}
+
+## Excess edges measure
+sum(g3[V(snaTenSup)$Caste!="RCYaathavar",V(snaTenSup)$Caste!="RCYaathavar"])
+
+## Now creating the comparisons
+excessedgesHindu = rep(0,10000)
+for (i in 1:10000){
+  V(snaTenSup)$HinduRandom = sample(V(snaTenSup)$Religion,362)
+  excessedgesHindu[i] = sum(g3[V(snaTenSup)$HinduRandom==0,V(snaTenSup)$HinduRandom==0])
+}
+
+TenIndivIDs<-V(snaTenSup)$name
+
+denHindu<-rep(0,10000)
+transHindu<-rep(0,10000)
+recipHindu<-rep(0,10000)
+
+for (i in 1:10000){
+  denHindu[i] = graph.density(induced.subgraph(snaTenSup,vids=sample(TenIndivIDs,248)))
+  transHindu[i] = transitivity(induced.subgraph(snaTenSup,vids=sample(TenIndivIDs,248)))
+  recipHindu[i] = reciprocity(induced.subgraph(snaTenSup,vids=sample(TenIndivIDs,248)))
+}
+
+HinduSim<-cbind(excessedgesHindu,denHindu,transHindu,recipHindu)
+HinduSim<-as.data.frame(HinduSim)
+
+1-ecdf(HinduSim$excessedgesHindu)(sum(g3[V(snaTenSup)$Religion==0,V(snaTenSup)$Religion==0]))
+1-ecdf(HinduSim$denHindu)(graph.density(snaTenHSup))
+1-ecdf(HinduSim$transHindu)(transitivity(snaTenHSup))
+1-ecdf(HinduSim$recipHindu)(reciprocity(snaTenHSup))
+
+AllHindu<-cbind(sum(g3[V(snaTenSup)$Religion==0,V(snaTenSup)$Religion==0]),1-ecdf(HinduSim$excessedgesHindu)(sum(g3[V(snaTenSup)$Religion==0,V(snaTenSup)$Religion==0])),graph.density(snaTenHSup),1-ecdf(HinduSim$denHindu)(graph.density(snaTenHSup)),transitivity(snaTenHSup),1-ecdf(HinduSim$transHindu)(transitivity(snaTenHSup)),reciprocity(snaTenHSup),1-ecdf(HinduSim$recipHindu)(reciprocity(snaTenHSup)))
+
+
+##################
+## Monthly Puja ##
+##################
+
+## The relevant comparison here is to the Hindu residents
 
 g<-get.adjacency(snaTenHSup)
-
-# This is creating a matrix of all dyads where I'm in a sense weighting the existence of each edge by the overall likelihood of that edge, given the outdegree of i and the indegree of j (over the total number of edges)
 
 for (i in 1:length(V(snaTenHSup)$name)){
   for (j in 1:length(V(snaTenHSup)$name)){
@@ -344,7 +416,7 @@ for (i in 1:length(V(snaTenHSup)$name)){
   }
 }
 
-# Mari Att
+
 sum(g[V(snaTenHSup)$MariAtt==1,V(snaTenHSup)$MariAtt==1])
 
 excessedgesMariAtt = rep(0,10000)
@@ -375,7 +447,13 @@ MariAttSim<-as.data.frame(MariAttSim)
 
 MariAtt<-cbind(sum(g[V(snaTenHSup)$MariAtt==1,V(snaTenHSup)$MariAtt==1]),1-ecdf(MariAttSim$excessedgesMariAtt)(sum(g[V(snaTenHSup)$MariAtt==1,V(snaTenHSup)$MariAtt==1])),graph.density(snaTenHSupMariAtt),1-ecdf(MariAttSim$denMariAtt)(graph.density(snaTenHSupMariAtt)),transitivity(snaTenHSupMariAtt),1-ecdf(MariAttSim$transMariAtt)(transitivity(snaTenHSupMariAtt)),reciprocity(snaTenHSupMariAtt),1-ecdf(MariAttSim$recipMariAtt)(reciprocity(snaTenHSupMariAtt)))
 
-# Mari Fest
+
+#####################
+## Annual Festival ##
+#####################
+
+## As above, the relevant comparison here is to the Hindu residents
+
 sum(g[V(snaTenHSup)$Fest2012==1,V(snaTenHSup)$Fest2012==1])
 
 excessedgesMariFest = rep(0,10000)
@@ -405,7 +483,45 @@ MariFestSim<-as.data.frame(MariFestSim)
 MariFest<-cbind(sum(g[V(snaTenHSup)$Fest2012==1,V(snaTenHSup)$Fest2012==1]),1-ecdf(MariFestSim$excessedgesMariFest)(sum(g[V(snaTenHSup)$Fest2012==1,V(snaTenHSup)$Fest2012==1])),graph.density(snaTenHSupMariFest2012),1-ecdf(MariFestSim$denMariFest)(graph.density(snaTenHSupMariFest2012)),transitivity(snaTenHSupMariFest2012),1-ecdf(MariFestSim$transMariFest)(transitivity(snaTenHSupMariFest2012)),reciprocity(snaTenHSupMariFest2012),1-ecdf(MariFestSim$recipMariFest)(reciprocity(snaTenHSupMariFest2012)))
 
 
-### For MariProcession - Compared to all Fest
+####################
+## Vow Procession ##
+####################
+
+## First, comparing to the Hindu residents (not reported in the paper)
+
+sum(g[V(snaTenHSup)$Procession==1,V(snaTenHSup)$Procession==1])
+
+
+excessedgesMariProcession = rep(0,10000)
+for (i in 1:10000){
+  V(snaTenHSup)$MariProcessionRandom = sample(V(snaTenHSup)$Procession,248)
+  excessedgesMariProcession[i] = sum(g[V(snaTenHSup)$MariProcessionRandom==1,V(snaTenHSup)$MariProcessionRandom==1])
+}
+
+
+denMariProcession<-rep(0,10000)
+transMariProcession<-rep(0,10000)
+recipMariProcession<-rep(0,10000)
+
+
+for (i in 1:10000){
+  denMariProcession[i] = graph.density(induced.subgraph(snaTenHSup,vids=sample(TenHIndivIDs,28)))
+  transMariProcession[i] = transitivity(induced.subgraph(snaTenHSup,vids=sample(TenHIndivIDs,28)))
+  recipMariProcession[i] = reciprocity(induced.subgraph(snaTenHSup,vids=sample(TenHIndivIDs,28)))
+}
+
+MariProcessionSim<-cbind(excessedgesMariProcession,denMariProcession,transMariProcession,recipMariProcession)
+MariProcessionSim<-as.data.frame(MariProcessionSim)
+
+1-ecdf(MariProcessionSim$excessedgesMariProcession)(sum(g[V(snaTenHSup)$Procession==1,V(snaTenHSup)$Procession==1]))
+1-ecdf(MariProcessionSim$denMariProcession)(graph.density(snaTenHSupMariProcession))
+1-ecdf(MariProcessionSim$transMariProcession)(transitivity(snaTenHSupMariProcession))
+1-ecdf(MariProcessionSim$recipMariProcession)(reciprocity(snaTenHSupMariProcession))
+
+MariProcession<-cbind(sum(g[V(snaTenHSup)$Procession==1,V(snaTenHSup)$Procession==1]),1-ecdf(MariProcessionSim$excessedgesMariProcession)(sum(g[V(snaTenHSup)$Procession==1,V(snaTenHSup)$Procession==1])),graph.density(snaTenHSupMariProcession),1-ecdf(MariProcessionSim$denMariProcession)(graph.density(snaTenHSupMariProcession)),transitivity(snaTenHSupMariProcession),1-ecdf(MariProcessionSim$transMariProcession)(transitivity(snaTenHSupMariProcession)),reciprocity(snaTenHSupMariProcession),1-ecdf(MariProcessionSim$recipMariProcession)(reciprocity(snaTenHSupMariProcession)))
+
+
+### Now, the comparison is to all festival participants (reported in the paper)
 
 g2<-get.adjacency(snaTenHSupMariFest2012)
 
@@ -415,7 +531,6 @@ for (i in 1:length(V(snaTenHSupMariFest2012)$name)){
   }
 }
 
-
 sum(g2[V(snaTenHSupMariFest2012)$Procession==1,V(snaTenHSupMariFest2012)$Procession==1])
 
 
@@ -424,7 +539,6 @@ for (i in 1:10000){
   V(snaTenHSupMariFest2012)$MariProcessionRandom1 = sample(V(snaTenHSupMariFest2012)$Procession,64)
   excessedgesMariProcession1[i] = sum(g2[V(snaTenHSupMariFest2012)$MariProcessionRandom1==1,V(snaTenHSupMariFest2012)$MariProcessionRandom1==1])
 }
-
 
 denMariProcession1<-rep(0,10000)
 transMariProcession1<-rep(0,10000)
@@ -448,210 +562,189 @@ MariProcessionSim1<-as.data.frame(MariProcessionSim1)
 
 MariProcession1<-cbind(sum(g2[V(snaTenHSupMariFest2012)$Procession==1,V(snaTenHSupMariFest2012)$Procession==1]),1-ecdf(MariProcessionSim1$excessedgesMariProcession1)(sum(g2[V(snaTenHSupMariFest2012)$Procession==1,V(snaTenHSupMariFest2012)$Procession==1])),graph.density(snaTenHSupMariProcession),1-ecdf(MariProcessionSim1$denMariProcession1)(graph.density(snaTenHSupMariProcession)),transitivity(snaTenHSupMariProcession),1-ecdf(MariProcessionSim1$transMariProcession1)(transitivity(snaTenHSupMariProcession)),reciprocity(snaTenHSupMariProcession),1-ecdf(MariProcessionSim1$recipMariProcession1)(reciprocity(snaTenHSupMariProcession)))
 
-
-## For Hindu versus all Tenpatti
-
-
-g3<-get.adjacency(snaTenSup)
-
-# This is creating a matrix of all dyads where I'm in a sense weighting the existence of each edge by the overall likelihood of that edge, given the outdegree of i and the indegree of j (over the total number of edges)
-
-for (i in 1:length(V(snaTenSup)$name)){
-  for (j in 1:length(V(snaTenSup)$name)){
-    g3[i,j]=are.connected(snaTenSup,i,j)*1 - ((degree(snaTenSup,i,mode="out")*degree(snaTenSup,j,mode="in"))/ecount(snaTenSup))
-  }
-}
-
-sum(g3[V(snaTenSup)$Caste!="RCYaathavar",V(snaTenSup)$Caste!="RCYaathavar"])
-
-excessedgesHindu = rep(0,10000)
-for (i in 1:10000){
-  V(snaTenSup)$HinduRandom = sample(V(snaTenSup)$Religion,362)
-  excessedgesHindu[i] = sum(g3[V(snaTenSup)$HinduRandom==0,V(snaTenSup)$HinduRandom==0])
-}
-
-TenIndivIDs<-V(snaTenSup)$name
-
-denHindu<-rep(0,10000)
-transHindu<-rep(0,10000)
-recipHindu<-rep(0,10000)
-
-for (i in 1:10000){
-  denHindu[i] = graph.density(induced.subgraph(snaTenSup,vids=sample(TenIndivIDs,248)))
-  transHindu[i] = transitivity(induced.subgraph(snaTenSup,vids=sample(TenIndivIDs,248)))
-  recipHindu[i] = reciprocity(induced.subgraph(snaTenSup,vids=sample(TenIndivIDs,248)))
-}
-
-HinduSim<-cbind(excessedgesHindu,denHindu,transHindu,recipHindu)
-HinduSim<-as.data.frame(HinduSim)
-
-1-ecdf(HinduSim$excessedgesHindu)(sum(g3[V(snaTenSup)$Religion==0,V(snaTenSup)$Religion==0]))
-1-ecdf(HinduSim$denHindu)(graph.density(snaTenHSup))
-1-ecdf(HinduSim$transHindu)(transitivity(snaTenHSup))
-1-ecdf(HinduSim$recipHindu)(reciprocity(snaTenHSup))
-
-AllHindu<-cbind(sum(g3[V(snaTenSup)$Religion==0,V(snaTenSup)$Religion==0]),1-ecdf(HinduSim$excessedgesHindu)(sum(g3[V(snaTenSup)$Religion==0,V(snaTenSup)$Religion==0])),graph.density(snaTenHSup),1-ecdf(HinduSim$denHindu)(graph.density(snaTenHSup)),transitivity(snaTenHSup),1-ecdf(HinduSim$transHindu)(transitivity(snaTenHSup)),reciprocity(snaTenHSup),1-ecdf(HinduSim$recipHindu)(reciprocity(snaTenHSup)))
-
-
+## Combining results (these are what is reported in table 2 in the paper)
 rbind(AllHindu,MariAtt,MariFest,MariProcession1)
 
 
 
+##########################
+##########################
+## 4. RELIGIOUS ALTERS  ##
+##########################
+##########################
 
-####################################
-####################################
-######### RELIGIOUS ALTERS #########
-####################################
-####################################
+## Code used to count the number of a person's ties that are to people of other religions
+## Religions are coded as 0 = Hindu, 1 = Catholic, 2 = Muslim, 3 = Protestant (but, no Tenpatti Hindu residents named Protestants as alters, so that level is not included)
 
+get_other <- function(graph, attribute) {
 
-# While I am not providing the underlying metadata, I am including the code used to calculate the percent of each person's alters that are of other religions
-# Religions were coded as 0 = Hindu, 1 = Catholic, , 2 = Muslim, 3 = Protestant (but, No Tenpatti villagers named Protestants as alters, so that level is not included)
-## NOTE -- 72105 was born RC Yathavar, and had a love marriage to a Hindu Yathavar man in the village; she is nominally considered Hindu here, but is an outlier, e.g. her ties are roughly 60% to Catholics...
-## tried including age, wealth, but neither improved model fit. 
+  mat <- get.adjacency(graph)
 
-# get_percother <- function(graph, attribute) {
-#   
-#   mat <- get.adjacency(graph)
-#   
-#   attr_levels = get.vertex.attribute(graph, attribute)
-#   attr_counts<-data.frame(0,0,0)
-#   
-#   num_levels = length(unique(attr_levels))
-#   
-#   for (ego in 1:nrow(mat)) {
-#     
-#     # initialize actor-specific variables
-#     alter_attr_counts = rep(0, num_levels)
-#     num_alters_this_ego = 0
-#     
-#     for (alter in 1:ncol(mat)) {
-#       
-#       # only examine alters that are actually tied to ego
-#       if (mat[ego, alter] == 1) {
-#         
-#         num_alters_this_ego = num_alters_this_ego + 1
-#         
-#         # get the alter's level on the attribute 
-#         alter_attr = get.vertex.attribute(graph, attribute, alter)
-#         
-#         # increment the count of alters with this level
-#         # of the attribute by 1
-#         alter_attr_counts[alter_attr + 1] =
-#           alter_attr_counts[alter_attr + 1] + 1
-#       }
-#     }
-#     
-#     # append new ego to list
-#     attr_counts<-rbind(attr_counts,alter_attr_counts)
-#   }
-#   return(attr_counts)
-# }
-# 
-# TpercotherRelig<-get_percother(snaTenHSupFull,"Religion")
-# b<-cbind(V(snaTenHSupFull)$name, V(snaTenHSupFull)$Religion,TpercotherRelig[-1,],degree(snaTenHSupFull,mode="out"))
-# names(b)<-c("IndivID","OwnRelig","AlterHindu","AlterCatholic","AlterMuslim","OutDegree") 
-# 
-# percother<-rep(0,length(b$IndivID))
-# for(i in 1:length(b$IndivID)){
-#   if(b$OwnRelig[i] == 0){
-#     percother[i]<-1-(b$AlterHindu[i]/b$OutDegree[i])
-#   } else {
-#     percother[i]<-1-(b$AlterCatholic[i]/b$OutDegree[i])
-#   }
-# }
-# 
-# b1<-cbind(b,percother)
-# b1$percsame<-1-b1$percother
+  attr_levels = get.vertex.attribute(graph, attribute)
+  attr_counts<-data.frame(0,0,0)
 
+  num_levels = length(unique(attr_levels))
 
-b1<-read.csv("AlterReligion.csv",as.is=TRUE)
+  for (ego in 1:nrow(mat)) {
 
-b2<-merge(TenH,b1,by="IndivID",all.x=TRUE,sort=FALSE)
-b2<-subset(b2,OutDegree>0)
+    # initialize actor-specific variables
+    alter_attr_counts = rep(0, num_levels)
+    num_alters_this_ego = 0
 
+    for (alter in 1:ncol(mat)) {
+
+      # only examine alters that are actually tied to ego
+      if (mat[ego, alter] == 1) {
+
+        num_alters_this_ego = num_alters_this_ego + 1
+
+        # get the alter's level on the attribute
+        alter_attr = get.vertex.attribute(graph, attribute, alter)
+
+        # increment the count of alters with this level
+        # of the attribute by 1
+        alter_attr_counts[alter_attr + 1] =
+          alter_attr_counts[alter_attr + 1] + 1
+      }
+    }
+
+    # append new ego to list
+    attr_counts<-rbind(attr_counts,alter_attr_counts)
+  }
+  return(attr_counts)
+}
+
+## Note: this will take some time
+otherRelig<-get_other(snaTenHSupFull,"Religion")
+
+otherRelig<-cbind(V(snaTenHSupFull)$name, V(snaTenHSupFull)$Religion,otherRelig[-1,],degree(snaTenHSupFull,mode="out"))
+names(otherRelig)<-c("IndivID","OwnRelig","AlterHindu","AlterCatholic","AlterMuslim","OutDegree")
+otherRelig<-subset(otherRelig,OutDegree>0)
+
+## Adding in other covariates that might influence the number of religious others
+## Where possible, centering and scaling the variables
+otherRelig<-merge(otherRelig,Ten[,c(1,3:7,14:17)],by="IndivID")
+otherRelig$n_other<-otherRelig$AlterCatholic+otherRelig$AlterMuslim
+otherRelig$is_SC<-otherRelig$Caste=="Pallar" | otherRelig$Caste == "Arundhathiyar"
+otherRelig$is_male<-otherRelig$Gender=="Male"
+otherRelig$eduyears <- (otherRelig$EduYears-mean(otherRelig$EduYears))/sd(otherRelig$EduYears)
+otherRelig$age <- (otherRelig$Age-mean(otherRelig$Age))/sd(otherRelig$Age)
+otherRelig$Age2 <- otherRelig$Age^2
+otherRelig$age2 <- (otherRelig$Age2-mean(otherRelig$Age2))/sd(otherRelig$Age2)
+otherRelig$wealth <- (otherRelig$HouseholdWealthCalc-mean(otherRelig$HouseholdWealthCalc))/sd(otherRelig$HouseholdWealthCalc)
+
+otherRelig <- otherRelig[,c(1,6,12:20,22,23)]
+names(otherRelig)<-c("indiv","n_alters","is_participant_fest","is_participant_puja","is_vow","is_mulai","n_other","is_SC","is_male","eduyears","age","age2","wealth")
+otherRelig$indiv <- factor(otherRelig$indiv)
+otherRelig$is_SC<-as.numeric(otherRelig$is_SC)
+otherRelig$is_male<-as.numeric(otherRelig$is_male)
+
+## some strange aspect of R data formatting throws an error with this current formatting; as a work around...
+write.csv("otherRelig.csv")
+otherRelig<-read.csv("otherRelig.csv",as.is=TRUE)
+otherRelig$indiv<-factor(otherRelig$indiv)
 
 require(rethinking)
 
-
-
-participdata=data.frame(b2$IndivID,b2$AlterChristian+b2$AlterMuslim,b2$OutDegree,b2$MariAtt,b2$Fest2012,b2$Mulaipari,b2$Procession)
-
-colnames(participdata)=c("indiv","n_other","n_alters","is_participant_puja","is_participant_fest","is_mulai","is_vow")
-participdata$is_SC<-b2$Caste=="Pallar" | b2$Caste == "Arundhathiyar"
-participdata$eduyears<-b2$EduYears
-participdata$is_male<-b2$Gender=="Male"
-participdata$age<-b2$Age
-participdata$wealth<-b2$HouseholdWealthCalc
-
+## Binomial predicting religious others, and including participation in the monthly puja
 m_wor<-map2stan(
   alist(
-    n_other~dbinom(n_alters,p),
-    logit(p)<-alpha[indiv]+beta_wor*is_participant_puja+beta_SC*is_SC+beta_edu*eduyears+beta_male*is_male,
-    alpha[indiv]~dnorm(alpha_ego_mu,alpha_ego_sigma),
-    alpha_ego_mu ~ dnorm(0, 1),
-    alpha_ego_sigma ~ dcauchy(0, 1),
-    beta_wor~dnorm(0,1),
-    beta_SC~dnorm(0,1),
-    beta_edu~dnorm(0,1),
-    beta_male~dnorm(0,1)
+    n_other ~ dbinom(n_alters, p),
+    logit(p) <- alpha + tau*z[indiv] + beta_wor*is_participant_puja + beta_edu*eduyears + beta_age*age + beta_age2*age2 + beta_male*is_male + beta_SC*is_SC+ beta_wealth*wealth,
+    z[indiv] ~ dnorm(0, 1),
+    alpha ~ dnorm(0, 1),
+    tau ~ dcauchy(0, 1),
+    beta_wor ~ dnorm(0, 1),
+    beta_edu ~ dnorm(0, 1),
+    beta_age ~ dnorm(0, 1),
+    beta_age2 ~ dnorm(0, 1),
+    beta_male ~ dnorm(0, 1),
+    beta_SC ~ dnorm(0, 1),
+    beta_wealth ~ dnorm(0, 1)
   ),
-  data=participdata, chains=2, iter=2500, warmup=500
+  data=otherRelig, chains=4, iter=2000, warmup=1000, control=list(max_treedepth=20),constraints=list(tau="lower=0")
 )
 
-precis(m_wor,digits=3,prob=0.95)
-
-post_m_wor<-extract.samples(m_wor)
-
-log_odds_outcome <- post_m_wor$alpha_ego_mu + post_m_wor$beta_wor*1 + post_m_wor$beta_SC*0  + post_m_wor$beta_edu*5 + post_m_wor$beta_male*0
-pr_outcome <- logistic(log_odds_outcome)
-mean_pr_outcome <- mean(pr_outcome) # point est
-se_pr_outcome <- sd(pr_outcome)  # standard error
-hpdi_pr_outcome <- HPDI(pr_other_m_wor) # interval boundaries
-
-
+## here including participation in the annual festival
 m_fest<-map2stan(
   alist(
-    n_other~dbinom(n_alters,p),
-    logit(p)<-alpha[indiv]+beta_fest*is_participant_fest+beta_SC*is_SC+beta_edu*eduyears+beta_male*is_male,
-    alpha[indiv]~dnorm(alpha_ego_mu,alpha_ego_sigma),
-    alpha_ego_mu ~ dnorm(0,1),
-    alpha_ego_sigma ~ dcauchy(0,1),
-    beta_fest~dnorm(0,1),
-    beta_SC~dnorm(0,1),
-    beta_edu~dnorm(0,1),
-    beta_male~dnorm(0,1)
+    n_other ~ dbinom(n_alters, p),
+    logit(p) <- alpha + tau*z[indiv] + beta_fest*is_participant_fest + beta_edu*eduyears + beta_age*age + beta_age2*age2 + beta_male*is_male + beta_SC*is_SC+ beta_wealth*wealth,
+    z[indiv] ~ dnorm(0, 1),
+    alpha ~ dnorm(0, 1),
+    tau ~ dcauchy(0, 1),
+    beta_fest ~ dnorm(0, 1),
+    beta_edu ~ dnorm(0, 1),
+    beta_age ~ dnorm(0, 1),
+    beta_age2 ~ dnorm(0, 1),
+    beta_male ~ dnorm(0, 1),
+    beta_SC ~ dnorm(0, 1),
+    beta_wealth ~ dnorm(0, 1)
   ),
-  data=participdata, chains=2, iter=2500, warmup=500
+  data=otherRelig, chains=4, iter=2000, warmup=1000, control=list(max_treedepth=20),constraints=list(tau="lower=0")
 )
 
-precis(m_fest,digits=3,prob=0.95)
-
+## breaking out festival participation into the vow procession and the mulaipari procession
 m_fest_levels<-map2stan(
   alist(
-    n_other~dbinom(n_alters,p),
-    logit(p)<-alpha[indiv]+beta_mulai*is_mulai+beta_vow*is_vow+beta_SC*is_SC+beta_edu*eduyears+beta_male*is_male,
-    alpha[indiv]~dnorm(alpha_ego_mu,alpha_ego_sigma),
-    alpha_ego_mu ~ dnorm(0,1),
-    alpha_ego_sigma ~ dcauchy(0,1),
-    beta_mulai~dnorm(0,1),
-    beta_vow~dnorm(0,1),
-    beta_SC~dnorm(0,1),
-    beta_edu~dnorm(0,1),
-    beta_male~dnorm(0,1)
+    n_other ~ dbinom(n_alters, p),
+    logit(p) <- alpha + tau*z[indiv] + beta_mulai*is_mulai+beta_vow*is_vow + beta_edu*eduyears + beta_age*age + beta_age2*age2 + beta_male*is_male + beta_SC*is_SC+ beta_wealth*wealth,
+    z[indiv] ~ dnorm(0, 1),
+    alpha ~ dnorm(0, 1),
+    tau ~ dcauchy(0, 1),
+    beta_mulai ~ dnorm(0, 1),
+    beta_vow ~ dnorm(0, 1),
+    beta_edu ~ dnorm(0, 1),
+    beta_age ~ dnorm(0, 1),
+    beta_age2 ~ dnorm(0, 1),
+    beta_male ~ dnorm(0, 1),
+    beta_SC ~ dnorm(0, 1),
+    beta_wealth ~ dnorm(0, 1)
   ),
-  data=participdata, chains=2, iter=2500, warmup=500
+  data=otherRelig, chains=4, iter=2000, warmup=1000, control=list(max_treedepth=20),constraints=list(tau="lower=0")
 )
 
-precis(m_fest_levels,digits=3,prob=0.95)
+precis(m_wor,prob=0.95,digits=3)
+precis(m_fest,prob=0.95,digits=3)
+precis(m_fest_levels,prob=0.95,digits=3)
+
+
+
+## Creating summary plots of the models
+b <- precis(m_wor, prob=0.65)
+b2 <- precis(m_wor, prob=0.95)
+points <- cbind(b[,1:4], b2[,3:4])
+par(mar=c(5,7,4,1), mfrow=c(1,2), lend=3)
+plot(points[,1], c(9:1), xlim=c(-2.75, 1.25), ylim=c(0.5, 9.5), xlab=("Estimate"),ylab="", yaxt="n", main="Monthly Worship", cex.axis=0.8, type="n")
+abline(v=0, lty=1, lwd=0.75)
+for (i in 9:1) {
+  abline(h=10-i, lty=3, lwd=0.5)
+  lines(c(points[10-i,3], points[10-i,4]), c(i, i), lwd=5)
+  lines(c(points[10-i,5], points[10-i,6]), c(i, i), lwd=2)
+}
+points(points[,1], c(9:1), pch=3, cex=1.5)
+axis(2, at = c(9:1), labels = c("Alpha", "Tau", "Collective Ritual", "Education", "Age", "Age squared", "Gender (F=0)", "Caste (SC=1)", "Wealth"), cex.axis=0.9, tick = FALSE, line=FALSE, las=TRUE)
+b <- precis(m_fest, prob=0.65)
+b2 <- precis(m_fest, prob=0.95)
+points <- cbind(b[,1:4], b2[,3:4])
+par(mar=c(5,1,4,7), lend=3)
+plot(points[,1], c(9:1), xlim=c(-2.75, 1.25), ylim=c(0.5, 9.5), xlab=("Estimate"),ylab="", yaxt="n", main="Annual Festival", cex.axis=0.8, type="n")
+abline(v=0, lty=1, lwd=0.75)
+for (i in 9:1) {
+  abline(h=10-i, lty=3, lwd=0.5)
+  lines(c(points[10-i,3], points[10-i,4]), c(i, i), lwd=5)
+  lines(c(points[10-i,5], points[10-i,6]), c(i, i), lwd=2)
+}
+points(points[,1], c(9:1), pch=3, cex=1.5)
 
 
 
 
-
-
-### CODE FOR PLOTTING THE NETWORK
-
+##############################
+##############################
+## 5. PLOTTING THE NETWORK  ##
+##############################
+##############################
 
 castecol = get.vertex.attribute(snaTenHSup,"Caste")
 unique(castecol)
@@ -691,6 +784,3 @@ legend("topright",c("No","Yes"),fill=c("white","dodgerblue"))
 
 plot.igraph(snaTenHSup,edge.width=E(snaTenHSup)$SupSum/3,edge.arrow.size=.1,vertex.size=evcent,vertex.color=festcol,vertex.label=NA,layout=snlayout,edge.curved=TRUE)
 legend("topright",c("No","Mulaipari","Vow Procession","Both"),fill=c("white","dodgerblue","red","mediumorchid"))
-
-
-
