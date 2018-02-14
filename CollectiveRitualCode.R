@@ -2,7 +2,7 @@
 ## Includes code for: 
 ## (1) generating the social support networks
 ## (2) running the exponential graph models predicting supportive relationships
-## (3) calculating cohesiveness of the networks of co-participants
+## (3) calculating cohesiveness of the networks of co-participants & evaluating how probable the observed measures are
 ## (4) predicting the likelihood that individuals will have supportive relationships with people of other religions
 ## (5) visualizing the networks
 
