@@ -197,6 +197,63 @@ estoprob <- function(b) {
 TenHCoWorpredergm<-read.csv("TenHPredictERGMCollRit.csv",header=TRUE,as.is=TRUE)
 TenHCoWorpredergm<-TenHCoWorpredergm[-c(19:23),]
 
+## The terms for GWESP and GWDSP in this file merit some explanation. The GWESP term changes depending on the number of edgewise shared partners that change with the addition of the edge. Generally speaking, the term models triadic closure. Importantly, the term has a decay parameter to account for the fact that each additional shared partner has a diminishing effect on the likelihood of a tie. This is the alpha parameter, which is determined as part of the model selection process (here, it is 0.4). For our fitted probabilities, I consider a few different cases of edgewise shared partners for the hypothetical dyads. First, I consider cases where the edge does not create any new edgewise shared partner (meaning, it does not close a triangle). For these cases, the GWESP change statistic is 0. Then, I consider cases where the edge creates one new edgewise shared partner for the two nodes involved in the tie, but does not affect the shared partnerships of any other neighboring nodes. For these cases, the GWESP change statistic is 1 (see the calculation below). I then consider cases where the edge creates two new edgewise shared partners (meaning, it closes two triangles), but does not affect the shared partnerships of any other neighboring nodes. And then, similarly for three edgewise shared partners. The calculations for the GWESP change statistics for these scenarios, following Hunter 2007 (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2031865/) are:
+
+## for the focal edge adding one edgewise shared partner, no shared partnerships of other edges affected:
+exp(0.4) * (((1-(1-exp(-.4))^1)*1))
+
+## for the focal edge adding two edgewise shared partners, no shared partnerships of other edges affected:
+exp(0.4) * (((1-(1-exp(-.4))^1)*0) + ((1-(1-exp(-0.4))^2)*1))
+
+## for the focal edge adding three edgewise shared partners, no shared partnerships of other edges affected:
+exp(0.4) * (((1-(1-exp(-.4))^1)*0) + ((1-(1-exp(-0.4))^3)*1))
+
+## GWDSP is yet more complicated. Basically, the addition of an edge could have many potential effects on associated dyads. To best represent the actual structure of this network, I calculate the actual GWESP and GWDSP change statistics associated with the addition of each actual edge to the network. I then isolate those edges that follow the hypothetical cases above for GWESP, and use their median associated GWDSP change statistic. This code also shows that the case examples of the focal edge not impacting other associated edges is generally the most common case. The code is below, but commented out. The derived GWDSP change statistics used when ESP = 0, ESP = 1, ESP = 2, and ESP = 3 for the focal dyad (and no effect on the shared partnerships of any other neighboring nodes) are: 10, 9.444275, 7.724334, and 8.041578, respectively.
+
+# change_stat_TenH<-data.frame(gwesp=rep(0,1662),gwdsp=rep(0,1662))
+# change_count_TenH<-matrix(nrow=1662,ncol=20)
+# change_count_TenH<-as.data.frame(change_count_TenH)
+# colnames(change_count_TenH)<-c(paste(0:9,"ESP",sep=""),paste(0:9,"DSP",sep=""))
+# 
+# for (i in 1:1662){
+#   Net_snaTenHSup <- asNetwork(snaTenHSup) # have to reinitialize the actual network each time, because delete.edges() actually overrides the original network, even with the assignment to a new object
+#   with_stat_TenH<-summary(Net_snaTenHSup~gwesp(0.4,fixed=TRUE)+gwdsp(0.4,fixed=TRUE))
+#   with_count_TenH<-summary(Net_snaTenHSup~esp(0:9)+dsp(0:9))
+#   Net_snaTenHSup1<-delete.edges(Net_snaTenHSup,i)
+#   without_stat_TenH<-summary(Net_snaTenHSup1~gwesp(0.4,fixed=TRUE)+gwdsp(0.4,fixed=TRUE))
+#   without_count_TenH<-summary(Net_snaTenHSup1~esp(0:9)+dsp(0:9))
+#   change_stat_TenH[i,] <- with_stat_TenH - without_stat_TenH
+#   change_count_TenH[i,] <- with_count_TenH - without_count_TenH
+# }  
+# 
+# maxESP_TenH<-vector()
+# for (i in 1:1662){
+#   maxESP_TenH[i]<-max(which((change_count_TenH[i,1:9]>0) == TRUE))-1
+# }
+# 
+# change_TenH<-cbind(change_stat_TenH,change_count_TenH,maxESP_TenH)
+# 
+# ss0_TenH<-subset(change_TenH,maxESP_TenH==0)
+# 
+# ss1_TenH<-subset(change_TenH,maxESP_TenH==1)
+# ss1_TenH$type<-paste(ss1_TenH$`0ESP`,ss1_TenH$`1ESP`,sep="_")
+# table(ss1_TenH$type) ## note most common type: 0,1
+# 
+# ss2_TenH<-subset(change_TenH,maxESP_TenH==2)
+# ss2_TenH$type<-paste(ss2_TenH$`0ESP`,ss2_TenH$`1ESP`,ss2_TenH$`2ESP`,sep="_")
+# table(ss2_TenH$type) ## note most common type: -1,1,1; then 0,0,1 (57 versus 54)
+# 
+# ss3_TenH<-subset(change_TenH,maxESP_TenH==3)
+# ss3_TenH$type<-paste(ss3_TenH$`0ESP`,ss3_TenH$`1ESP`,ss3_TenH$`2ESP`,ss3_TenH$`3ESP`,sep="_")
+# table(ss3_TenH$type) ## note most common type: 0,0,0,1
+# 
+# ## The GWDSP terms used when ESP = 0, ESP = 1, ESP = 2, and ESP = 3 for the focal dyad.
+# median(ss0_TenH$gwdsp)
+# median(ss1_TenH$gwdsp[ss1_TenH$type=="0_1"])
+# median(ss2_TenH$gwdsp[ss2_TenH$type=="0_0_1"])
+# median(ss3_TenH$gwdsp[ss3_TenH$type=="0_0_0_1"])
+
+
 pred.vect = rep(0,88)
 for (i in 2:89) {
   pred.vect[i-1]=estoprob(sum(as.numeric(TenHCoWorpredergm[,i])*TenHCoWorcoefs))
