@@ -2,7 +2,7 @@
 ## Includes code for: 
 ## (1) generating the social support networks
 ## (2) running the exponential graph models predicting supportive relationships
-## (3) calculating cohesiveness of the networks of co-participants & evaluating how probable the observed measures are
+## (3) calculating cohesiveness of the networks of co-participants
 ## (4) predicting the likelihood that individuals will have supportive relationships with people of other religions
 ## (5) visualizing the networks
 
@@ -277,7 +277,7 @@ abline(0.9, 0, lwd=1,col="lightgrey",lty="dotted")
 abline(1, 0, lwd=1,col="lightgrey",lty="dotted")
 
 labloc=c(1,2,3,4,5,6,7,8,9,10,11)
-lab=c("Diff caste","Same caste","+Mutual","+GWESP=1","GWESP=2","GWESP=3","Close kin","+Mutual","+GWESP=1","GWESP=2","GWESP=3")
+lab=c("Diff caste","Same caste","+Mutual","+ESP=1","ESP=2","ESP=3","Close kin","+Mutual","+ESP=1","ESP=2","ESP=3")
 axis(1,at=labloc,labels=FALSE)
 text(x=labloc,y=par()$usr[3]-0.1*(par()$usr[4]-par()$usr[4]/3),labels=lab,cex=0.6,pos=3,adj=2,xpd=TRUE)
 legend("topleft",c("No Co-Attendance","Co-Attendance"),cex=0.6,col=c(colors[c(1,2)]),pch=c(1,6))
@@ -315,7 +315,7 @@ abline(0.9, 0, lwd=1,col="lightgrey",lty="dotted")
 abline(1, 0, lwd=1,col="lightgrey",lty="dotted")
 
 labloc=c(1,2,3,4,5,6,7,8,9,10,11)
-lab=c("Diff caste","Same caste","+Mutual","+GWESP=1","GWESP=2","GWESP=3","Close kin","+Mutual","+GWESP=1","GWESP=2","GWESP=3")
+lab=c("Diff caste","Same caste","+Mutual","+ESP=1","ESP=2","ESP=3","Close kin","+Mutual","+ESP=1","ESP=2","ESP=3")
 axis(1,at=labloc,labels=FALSE)
 text(x=labloc,y=par()$usr[3]-0.1*(par()$usr[4]-par()$usr[4]/3),labels=lab,cex=0.6,pos=3,adj=2,xpd=TRUE)
 legend("topleft",c("No Co-Participation","Vow Procession","Mulaipari","Both"),cex=0.6,col=c(colors[c(1:4)]),pch=c(1:4))
@@ -375,7 +375,7 @@ abline(0.9, 0, lwd=1,col="lightgrey",lty="dotted")
 abline(1, 0, lwd=1,col="lightgrey",lty="dotted")
 
 labloc=c(1,2,3,4,5,6,7,8,9,10,11)
-lab=c("Diff caste","Same caste","+Mutual","+GWESP=1","GWESP=2","GWESP=3","Close kin","+Mutual","+GWESP=1","GWESP=2","GWESP=3")
+lab=c("Diff caste","Same caste","+Mutual","+ESP=1","ESP=2","ESP=3","Close kin","+Mutual","+ESP=1","ESP=2","ESP=3")
 axis(1,at=labloc,labels=FALSE)
 text(x=labloc,y=par()$usr[3]-0.1*(par()$usr[4]-par()$usr[4]/3),labels=lab,cex=0.6,pos=3,adj=2,xpd=TRUE)
 legend("topleft",c("No Co-Participation","Pujai","Vow Procession","Mulaipari","Vow&Mulaipari","Pujai&Vow","Pujai&Mulaipari","All"),cex=0.6,col=c(colors[c(1:8)]),pch=c(1:8))
@@ -858,6 +858,3 @@ legend("topright",c("No","Yes"),fill=c("white","dodgerblue"))
 
 plot.igraph(snaTenHSup,edge.width=E(snaTenHSup)$SupSum/3,edge.arrow.size=.1,vertex.size=evcent,vertex.color=festcol,vertex.label=NA,layout=snlayout,edge.curved=TRUE)
 legend("topright",c("No","Mulaipari","Vow Procession","Both"),fill=c("white","dodgerblue","red","mediumorchid"))
-
-
-
